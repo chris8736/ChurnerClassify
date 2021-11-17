@@ -9,6 +9,8 @@ from sklearn.model_selection import train_test_split
 FILE_FORMAT="{0}_{2}{1}.csv"
 
 def get_filepath(output_directory, data_type, size, note=""):
+    if len(note) != 0:
+        note=note+"_"
     return os.path.join(output_directory, FILE_FORMAT.format(data_type, int(size*100), note))
 
 def split_data(input_filepath, output_directory, test_size=0.2):
@@ -17,10 +19,11 @@ def split_data(input_filepath, output_directory, test_size=0.2):
     X = data
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, stratify=y)
     training_data = pd.concat([X_train, y_train], axis=1)
+    testing_data = pd.concat([X_test, y_test], axis=1)
 
     training_data.to_csv(get_filepath(output_directory, "training", 1-test_size, note="stratified"), index=False)
-
-    X_test.to_csv(get_filepath(output_directory, "testing", test_size, note="stratified"), index=False)
+    testing_data.to_csv(get_filepath(output_directory, "testing", test_size, note="stratified"), index=False)
+    X_test.to_csv(get_filepath(output_directory, "testing", test_size, note="stratified_nolabel"), index=False)
     
 if __name__ == "__main__":
     if len(sys.argv) != 3:
