@@ -1,3 +1,10 @@
+dataset kaggle site + categories from source
 https://www.kaggle.com/sakshigoyal7/credit-card-customers/version/1
 https://leaps.analyttica.com/sample_cases/11
+
+xgboost guide (statquest)
 https://www.youtube.com/watch?v=GrJP9FLV3FE
+
+previous notebooks
+https://www.kaggle.com/jessintha/credit-card-customer-churn-prediction
+https://www.kaggle.com/sakshigoyal7/credit-card-customers/tasks?taskId=2729

@@ -69,6 +69,8 @@ print("Average: ", sum(scores) / len(scores))
 
 clf.fit(X, y)
 
+param_grid = {'maxdepth'}
+
 print("Training accuracy: ", accuracy_score(
     y, clf.predict(X)))
 
