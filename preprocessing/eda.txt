@@ -1,0 +1,24 @@
+Outlier detection (prevent overfitting):
+
+https://www.kaggle.com/jessintha/credit-card-customer-churn-prediction
+-used iqr to clip outliers at left and right whiskers
+-dropped samples with extremely high trans amt
+
+Data balancing (fix accuracy metrix, ensure model is strong):
+
+https://www.kaggle.com/jessintha/credit-card-customer-churn-prediction
+https://www.kaggle.com/thomaskonstantin/bank-churn-data-exploration-and-churn-prediction
+https://www.kaggle.com/andreshg/churn-prediction-0-99-auc-h2o-sklearn-smote#2.-Feature-Engeneering
+-used smote (upsampling)
+
+https://www.kaggle.com/josephchan524/bankchurnersclassifier-recall-97-accuracy-95#Data-Cleansing
+-stratified into test-train split
+
+Feature selection (reduces training time, helps some models):
+
+https://www.kaggle.com/jessintha/credit-card-customer-churn-prediction
+-used correlation matrix to identify highly correlated features and dropped them
+
+Feature creation?
+
+-nobody did this, but could improve the model
