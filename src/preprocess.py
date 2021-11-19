@@ -34,6 +34,12 @@ class Preprocess:
         self.df.drop(columns, axis=1, inplace=True)
         return self
 
+    # make attrition flag 0s and 1s
+    def code_output(self):
+        self.df["Attrition_Flag"] = self.df["Attrition_Flag"].apply(
+            lambda x: 1 if x == "Attrited Customer" else 0)
+        return self
+
     # Remove highly correlated features from the dataset
     def remove_high_correlation(self, threshold):
         # get sorted correlation pairs
@@ -54,15 +60,27 @@ class Preprocess:
                 if (not label[0] in cols_to_remove):
                     cols_to_remove.insert(len(cols_to_remove), label[0])
                 row = (label[0], label[1], str(corr_value))
-                print("{: >30} {: >30} {: >30}".format(*row))  # print label
+                # print("{: >30} {: >30} {: >30}".format(*row))  # print label
         self.remove_columns(cols_to_remove)
+        print("Removed the following features as correlation with another feature was >" +
+              str(threshold) + ": " + str(cols_to_remove))
         return self
 
     # Remove features with low correlation towards the output
-    def remove_low_impact():
+    def remove_low_impact(self, threshold):
+        self.code_output()
+        # Correlation with output variable
+        cor = self.df.corr()
+        cor_target = abs(cor["Attrition_Flag"])
+        so = cor_target.sort_values(kind="quicksort")
+
+        cols_to_remove = cor_target[cor_target < threshold].index.tolist()
+        self.remove_columns(cols_to_remove)
+        print("Removed the following features as correlation with output was <" +
+              str(threshold) + ": " + str(cols_to_remove))
         return self
 
 
 if __name__ == "__main__":
     # print(Preprocess("data/full.csv").remove_columns().df)
-    print(Preprocess("data/full.csv").remove_high_correlation(.7).df.columns)
+    print(Preprocess("data/full.csv").remove_high_correlation(.7).remove_low_impact(.1).df)
