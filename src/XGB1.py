@@ -24,16 +24,8 @@ from preprocess import Preprocess
 ppc = Preprocess(
     "../data/training_stratified_80.csv").code_output().drop_output().onehot_categorical()
 
-X = ppc.df
-y = ppc.output
-
-i = 0
-for feature in X.columns:
-    print("feature ", i, ": ", feature)
-    i += 1
-
-# normalize (motly for visualization)
-X = StandardScaler().fit_transform(X)
+X = ppc.df.to_numpy()
+y = ppc.output.to_numpy()
 
 clf = XGBClassifier(n_estimators=60, eval_metric='logloss',
                     use_label_encoder=False)
@@ -42,17 +34,19 @@ scores = cross_val_score(clf, X, y, cv=5, scoring='roc_auc')
 print(scores)
 print("Average: ", sum(scores) / len(scores))
 
+clf = XGBClassifier(n_estimators=60, eval_metric='logloss',
+                    use_label_encoder=False)
 clf.fit(X, y)
 
 # Test set
-ppc = Preprocess(
+test_ppc = Preprocess(
     "../data/testing_stratified_20.csv").code_output().drop_output().onehot_categorical()
 
-X = ppc.df
-y = ppc.output
+test_X = test_ppc.df.to_numpy()
+test_y = test_ppc.output.to_numpy()
 
 print("Testing accuracy: ", metrics.accuracy_score(
-    y, clf.predict(X)))
+    test_y, clf.predict(test_X)))
 
-plot_confusion_matrix(clf, X, y, values_format='d')
+plot_confusion_matrix(clf, test_X, test_y, values_format='d')
 plt.show()
