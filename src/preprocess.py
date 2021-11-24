@@ -1,39 +1,99 @@
 from __future__ import annotations
+from typing import List, Tuple
 import pandas as pd
 import numpy as np
+
+# SKLearn Imports
+from sklearn.preprocessing import OneHotEncoder
+
 import matplotlib.pyplot as plt
 import math
-
-from typing import List
 from scipy import stats
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import MinMaxScaler
 
-# This is a wrapper class to allow preprocessing data in different ways.
-# To add a method to this class, just make sure it returns itself at the end.
-# See remove_columns for an example
-
-
 class Preprocess:
-    def __init__(self, filepath: str) -> None:
-        self.filepath = filepath
-        self.df: pd.DataFrame
-        self.output = None
+    """DataFrame wrapper class to preprocess data.
+    All non-static methods will return the instance they were called from.
+    This is to facilitate method chaining.
+    """
+    def __init__(self, X=pd.DataFrame(), y=pd.DataFrame(), filepath: str = ""):
+        """Instantiates a new Preprocess object
 
-        self.load_file()
+        Parameters
+        ----------
+        X : pandas.DataFrame, default=[]
+            Feature vector to preprocess
+        y : pandas.DataFrama, default=[]
+            Output vector associated with X
+        filepath : str, default=""
+            If not empty, will overwrite X and y with data read from the given path.
+            Note: shorthand for loading data and then passing it through X and y.
+        """
+        self.set_data(X=X, y=y, filepath=filepath)
+        
+        self.output_column = "Attrition_Flag"
 
-    def load_file(self) -> None:
-        self.df = pd.read_csv(self.filepath)
+        # Memorization fields
+        self.oh_enc = None                  # One Hot Encoder
+        self.oh_cols = None                 # One Hot Columns
+        self.correlated_features = []     # Correlated features to drop
+        self.low_impact_features = None     # Low impact features to drop
 
-    # Remove columns from the dataset
-    # By default this just removes the CLIENTNUM column.
+    def set_data(self, X=pd.DataFrame(), y=pd.DataFrame(), filepath: str = ""):
+        """ Set the data to preprocessed.
+
+        Parameters
+        ----------
+        See the constructor's docstring for information.
+        """
+        self.df = X
+        self.y = y
+
+        if len(filepath) > 0:
+            self.df, self.y = Preprocess.split_data(filepath)
+
+        return self
+    
+    @staticmethod
+    def split_data(
+        filepath: str, 
+        output_column: str = "Attrition_Flag",
+    ) -> Tuple[pd.DataFrame, pd.DataFrame] :
+        """Loads a CSV file into a pandas.DataFrame and then splits it into 
+        feature matrix X and output vector y.
+
+        Parameters
+        ----------
+        filepath: str
+            Path of the file to load the data from.
+        
+        output_column : str, default="Attrition_Flag"
+            The column from the pandas.DataFrame to extract as an output vector
+        
+        Returns
+        -------
+        X : pandas.DataFrame
+            Feature matrix X
+        y : pandas.DataFrame
+            Output vector y
+        """
+        df = pd.read_csv(filepath)
+        return (df.drop([output_column], axis=1), df[output_column])
+
+    # ---------------- #
+    # Data Structuring #
+    # ---------------- #
+
     def remove_columns(self, columns: List[str] = ["CLIENTNUM"]) -> Preprocess:
-        # Validate columns type
-        if type(columns) != list:
-            raise TypeError(
-                f"Columns must be a list, but it is of type {type(columns)} instead.")
+        """Removes columns from the DataFrame.
 
+        Parameters
+        ----------
+        columns: List[str], default=["CLIENTNUM"]
+            Columns to remove from the DataFrame
+        """
         # Check that all columns exist in the DataFrame
         if not set(columns).issubset(self.df.columns):
             no_exist = [c for c in columns if c not in self.df.columns]
@@ -43,92 +103,123 @@ class Preprocess:
         self.df.drop(columns, axis=1, inplace=True)
         return self
 
-    # Data Structuring
 
-    # make attrition flag 0s and 1s
-    def code_output(self):
-        self.df["Attrition_Flag"] = self.df["Attrition_Flag"].apply(
-            lambda x: 1 if x == "Attrited Customer" else 0)
+    def code_output(self, use_y=True) -> Preprocess:
+        """Converts output vector into 0 or 1.
+
+        Parameters
+        ----------
+        use_y : bool, default=True
+            If True, processes self.y. Otherwise, it will process
+            self.df[self.output_column] instead.
+        """
+        code = lambda x: 1 if x == "Attrited Customer" else 0
+        if use_y:
+            if len(self.y) == 0:
+                raise ValueError("Output vector y is empty.")
+
+            self.y = self.y.apply(code)
+        else:
+            self.df[self.output_column] = self.df[self.output_column].apply(code)
+        
         return self
+    
 
-    def drop_output(self):
-        self.output = self.df.pop("Attrition_Flag")
-        return self
+    def onehot_encode(self,
+        columns=['Gender', 'Education_Level', 'Marital_Status', 'Income_Category', 'Card_Category'],
+        drop="first",
+    ) -> Preprocess:
+        """Encodes categorical columns using one-hot encoding
 
-    # code categorical vaiables
-    def onehot_categorical(self):
-        self.df = pd.get_dummies(
-            self.df, columns=['Gender', 'Education_Level', 'Marital_Status', 'Income_Category', 'Card_Category'])
+        Parameters
+        ----------
+        columns : List[str], default=['Gender', 'Education_Level', 'Marital_Status', 'Income_Category', 'Card_Category']
+            Columns to one-hot encode. This is memorized; subsequent calls to
+            onehot_encode will use the same value.
+        drop : str, default="first"
+            The drop policy for the OneHotEncoder.
+            For more details, see https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.OneHotEncoder.html
+        """
+        if self.oh_enc is None: # First call
+            self.oh_enc = OneHotEncoder(drop=drop)
+            self.oh_cols = columns
+            self.oh_enc.fit(self.df[self.oh_cols])
+        
+        onehot = self.oh_enc.transform(self.df[self.oh_cols]).toarray()
+        features = self.oh_enc.get_feature_names_out(self.oh_cols)
+        self.remove_columns(columns=self.oh_cols)
+        self.df = pd.concat(
+            [self.df, pd.DataFrame(onehot, columns=features).astype(int)],
+            axis=1
+        )
+        
         return self
 
     def shuffle(self):
-        self.df = self.df.sample(frac=1, random_state=0)
+        """Shuffles the DataFrame
+        """
+        self.df = self.df.sample(frac=1).reset_index(drop=True)
         return self
 
-    # Feature Selection + Visualization
+    # ----------------- #
+    # Feature Selection #
+    # ----------------- #
 
-    # Remove highly correlated features from the dataset
-    def remove_high_correlation(self, threshold):
-        # get sorted correlation pairs
-        c = self.df.corr().abs()
-        s = c.unstack()
-        so = s.sort_values(kind="quicksort")
+    def remove_correlated_features(self, threshold=0.9, append=False):
+        """Removes features that have a correlation above the threshold
+        Memorizes correlated features.
 
-        # remove from dataset if above threshold
-        last_label1 = ""
-        last_label2 = ""
-        cols_to_remove = []
-        for label, corr_value in zip(so.axes[0], so):
-            if (label[0] == last_label2 and label[1] == last_label1):  # if pair is equal
-                continue
-            last_label1 = label[0]
-            last_label2 = label[1]
-            if (corr_value != 1 and corr_value > threshold):
-                if (not label[0] in cols_to_remove):
-                    cols_to_remove.insert(len(cols_to_remove), label[0])
-        self.remove_columns(cols_to_remove)
-        print("Removed the following features as correlation with another feature was >" +
-              str(threshold) + ": " + str(cols_to_remove))
+        Parameters
+        ----------
+        threshold: float, default=0.95
+            The maximum value for correlation before removing the feature
+        """
+        if len(self.correlated_features) == 0 or append:
+            corr = self.df.corr().abs() # Gets symmetrical square matrix
+            corr = corr.where(np.triu(np.ones(corr.shape), k=1).astype(bool)) # Select triangular matrix
+
+            self.correlated_features.extend([ column for column in corr if any(corr[column] > threshold)])
+
+        self.remove_columns(columns=self.correlated_features)
+
         return self
 
-    def print_correlation_pairs(self):
-        c = self.df.corr().abs()
-        s = c.unstack()
-        so = s.sort_values(kind="quicksort")
-        for label, corr_value in zip(so.axes[0], so):
-            if (corr_value != 1):
-                row = (label[0], label[1], str(corr_value))
-                print("{: >30} {: >30} {: >30}".format(*row))
+    def remove_low_impact(self, threshold=0.001):
+        """Removes features with low correlation to the target
+        Memorizes low impact features.
 
-    # Remove features with low correlation towards the output
-    def remove_low_impact(self, threshold):
-        # Correlation with output variable
-        self.df["Output"] = self.output
-        cor = self.df.corr()
-        cor_target = abs(cor["Output"])
-        so = cor_target.sort_values(kind="quicksort")
+        Parameters
+        ----------
+        threshold: float, default=0.01
+            The minimum value of correlation to the target before removing the feature.
+        """
+        if self.low_impact_features is None: # First call
+            df = pd.concat([self.df, self.y], axis=1)
+            corr = df.corr()
+            corr_y = pd.DataFrame(corr[self.output_column]).sort_values(by=self.output_column)
+            self.low_impact_features = corr_y[(corr_y[self.output_column])<=threshold]\
+                .drop([self.output_column], axis=1)
 
-        cols_to_remove = cor_target[cor_target < threshold].index.tolist()
-        self.remove_columns(cols_to_remove)
-        print("Removed the following features as correlation with output was <" +
-              str(threshold) + ": " + str(cols_to_remove))
-        self.remove_columns(["Output"])
+        self.remove_columns(columns=self.low_impact_features)
+
         return self
 
-    def print_output_correlation(self):
-        self.df["Output"] = self.output
-        cor = self.df.corr()
-        cor_target = cor["Output"]
-        so = cor_target.sort_values(kind="quicksort")
-        self.remove_columns(["Output"])
-        print(so[:-1])
+    def drop_outliers(self, threshold=3):
+        """Drops rows that are considered as outliers
 
-    def drop_outliers(self, zthreshold):
-        # need this so output gets changed accordingly
-        self.df["Output"] = self.output
-        self.df = self.df[(np.abs(stats.zscore(self.df))
-                           < zthreshold).all(axis=1)]
-        self.output = self.df.pop("Output")
+        Parameters
+        ----------
+        threshold: float, default=3
+            The maximum magnitude of a zscore before removal
+        """
+        df = self.df
+        if self.oh_enc is not None: # Categorical data
+            df = df.drop(self.oh_enc.get_feature_names_out(self.oh_cols), axis=1)
+
+        idx = (np.abs(stats.zscore(df)) < threshold).all(axis=1)
+        self.df = self.df[idx]
+        self.y = self.y[idx]
+
         return self
 
     def convert_to_pcs(self):
@@ -228,9 +319,12 @@ def pinpoint_pcs():
 
 
 if __name__ == "__main__":
+    p = Preprocess(filepath="data/training_stratified_80.csv").code_output().onehot_encode()
+    print(len(p.df), len(p.y))
+    p.drop_outliers()
+    print(len(p.df), len(p.y))
+    # data = default()
 
-    data = default()
-
-    data.normalize()
-    data = data.convert_to_pcs()
-    data.graph_3d_pca()
+    # data.normalize()
+    # data = data.convert_to_pcs()
+    # data.graph_3d_pca()

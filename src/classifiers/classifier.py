@@ -4,7 +4,7 @@ class Classifier:
         # Initialize any internal variables in this function
         print("Unimplemented")
 
-    def preprocess(self, data, training=False):
+    def preprocess(self, filepath, training=False):
         # If training is true:
         #   Fit scalers if needed
         #   Identify features to drop
