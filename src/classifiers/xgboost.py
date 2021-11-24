@@ -1,10 +1,11 @@
-from classifier import Classifier
-from preprocess import Preprocess
+from .classifier import Classifier
+from ..preprocess import Preprocess
+from xgboost import XGBClassifier
 
 class XGBoost(Classifier):
-    def __init__(self, 
-        n_estimators=60, 
-        eval_metric="logloss", 
+    def __init__(self,
+        n_estimators=60,
+        eval_metric="logloss",
         scale_pos_weight=5.2,
         learning_rate=0.3
     ):
@@ -12,20 +13,28 @@ class XGBoost(Classifier):
             n_estimators=n_estimators,
             eval_metric=eval_metric,
             scale_pos_weight=scale_pos_weight,
-            learning_rate=learning_rate
+            learning_rate=learning_rate,
+            use_label_encoder=False
         )
-    
-    # Loads the data from given filepath
-    # Preprocesses it and returns the feature matrix and the label
-    def preprocess(self, filepath, training=False):
-        ppc = Preprocess(filepath).code_output().drop_output().onehot_categorical()
+        self.pp = None
+        self.ready = False
+   
+    def preprocess(self, filepath):
+        if self.pp is None:
+            self.pp = Preprocess(filepath=filepath)
+        else:
+            self.pp.set_data(filepath=filepath)
         
-        return (ppc.df, ppd.output)
+        self.pp.code_output().onehot_encode()
+        return self.pp.df, self.pp.y
     
     def train(self, filepath):
-        (X, y) = self.preprocess(filepath, training=True)
-        self.c.fit(X, y)
+        X,y = self.preprocess(filepath)
+        self.ready = True
+        self.c.fit(X,y)
 
     def predict(self, filepath):
-        (X, _y) = self.preprocess(filepath, training=False)
-        return
+        if not self.ready:
+            raise Exception("Please train the classifier before trying to predict")
+        X, _ = self.preprocess(filepath)
+        return self.c.predict(X)
