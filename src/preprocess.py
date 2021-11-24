@@ -2,23 +2,21 @@ from __future__ import annotations
 from typing import List, Tuple
 import pandas as pd
 import numpy as np
+from scipy import stats
 
 # SKLearn Imports
-from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import OneHotEncoder, MinMaxScaler, StandardScaler
+from sklearn.decomposition import PCA
 
 import matplotlib.pyplot as plt
 import math
-from scipy import stats
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
-from sklearn.preprocessing import MinMaxScaler
 
 class Preprocess:
     """DataFrame wrapper class to preprocess data.
-    All non-static methods will return the instance they were called from.
+    Unless stated otherwise, all non-static methods will return the instance they were called from.
     This is to facilitate method chaining.
     """
-    def __init__(self, X=pd.DataFrame(), y=pd.DataFrame(), filepath: str = ""):
+    def __init__(self, X=pd.DataFrame(), y=pd.DataFrame(), filepath: str = "", scaled=False):
         """Instantiates a new Preprocess object
 
         Parameters
@@ -30,6 +28,8 @@ class Preprocess:
         filepath : str, default=""
             If not empty, will overwrite X and y with data read from the given path.
             Note: shorthand for loading data and then passing it through X and y.
+        scaled : bool, default=False
+            Whether the data is scaled.
         """
         self.set_data(X=X, y=y, filepath=filepath)
         
@@ -38,10 +38,12 @@ class Preprocess:
         # Memorization fields
         self.oh_enc = None                  # One Hot Encoder
         self.oh_cols = None                 # One Hot Columns
-        self.correlated_features = []     # Correlated features to drop
+        self.correlated_features = []       # Correlated features to drop
         self.low_impact_features = None     # Low impact features to drop
+        self.pca = None                     # PCA model
+        self.scaler = None                  # Scaler
 
-    def set_data(self, X=pd.DataFrame(), y=pd.DataFrame(), filepath: str = ""):
+    def set_data(self, X=pd.DataFrame(), y=pd.DataFrame(), filepath: str = "", scaled=False):
         """ Set the data to preprocessed.
 
         Parameters
@@ -53,6 +55,8 @@ class Preprocess:
 
         if len(filepath) > 0:
             self.df, self.y = Preprocess.split_data(filepath)
+        
+        self.scaled = scaled
 
         return self
     
@@ -161,6 +165,28 @@ class Preprocess:
         self.df = self.df.sample(frac=1).reset_index(drop=True)
         return self
 
+    def extract_categorical(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """Extracts the non-categorical and the categorical data from self.df
+        Note: this method does not return self!
+
+        Parameters
+        ----------
+        df: pandas.DataFrame
+            The DataFrame with categorical data and continuous data.
+        
+        Returns
+        -------
+        df: pandas.DataFrame
+            The continuous part of df
+        cat_df: pandas.DataFrame
+            The categorical part of df
+        """
+        if self.oh_enc is None:
+            raise ReferenceError("Please onehot encode the categorical data first!")
+        
+        features = self.oh_enc.get_feature_names_out(self.oh_cols)
+        return self.df.drop(features, axis=1), self.df[features]
+    
     # ----------------- #
     # Feature Selection #
     # ----------------- #
@@ -205,16 +231,14 @@ class Preprocess:
         return self
 
     def drop_outliers(self, threshold=3):
-        """Drops rows that are considered as outliers
+        """Drops rows that are considered outliers
 
         Parameters
         ----------
         threshold: float, default=3
             The maximum magnitude of a zscore before removal
         """
-        df = self.df
-        if self.oh_enc is not None: # Categorical data
-            df = df.drop(self.oh_enc.get_feature_names_out(self.oh_cols), axis=1)
+        df, _ = self.extract_categorical()
 
         idx = (np.abs(stats.zscore(df)) < threshold).all(axis=1)
         self.df = self.df[idx]
@@ -222,15 +246,59 @@ class Preprocess:
 
         return self
 
-    def convert_to_pcs(self):
-        pca = PCA(n_components=len(self.df.columns))
-        principalComponents = pca.fit_transform(self.df)
-        pc_column_names = ["PC" + str(i)
-                           for i in range(1, len(self.df.columns)+1)]
-        self.df = pd.DataFrame(data=principalComponents,
-                               columns=pc_column_names)
+    def convert_to_pcs(self, ignoreCategorical=True, variance=0.95):
+        """Convert df into its principal components.
+
+        Parameters
+        ----------
+        ignoreCategorical: bool, default = True
+            Whether to ignore categorical data or not.
+        variance: [0,1], default=0.95
+            The explained variance for PC selection
+        """
+
+        if not self.scaled: # Data has not been scaled
+            self.scale(method="minmax")
+
+        df, cat_df = self.extract_categorical()
+
+        if self.pca is None:
+            self.pca = PCA(n_components='mle')
+            self.pca.fit(df)
+        
+        pc = self.pca.transform(df)
+        pc_columns = ["PC" + str(i) for i in range(1, len(pc[0])+1)]
+        pc_df = pd.DataFrame(data=pc, columns=pc_columns)
+
+        self.df = pd.concat([pc_df, cat_df], axis=1)
         return self
 
+    def scale(self, method="standard"):
+        """Scale the data
+
+        Parameters
+        ----------
+        method: {"standard", "minmax"}, default="standard"
+            The scaler to use to scale the data
+        """
+        if self.scaled: # Data is already scaled
+            return self
+        
+        if self.scaler is None:
+            if method == "standard":
+                self.scaler = StandardScaler()
+            elif method == "minmax":
+                self.scaler = MinMaxScaler()
+            else:
+                raise ValueError("Invalid method for scaling.")
+            self.scaler.fit(self.df)
+        
+        self.scaled = True
+        scaled_features = self.scaler.transform(self.df.values)
+        self.df = pd.DataFrame(scaled_features, 
+            index=self.df.index, columns=self.df.columns)
+        return self
+        
     def graph_2d_pca(self):
         fig = plt.figure(figsize=(8, 8))
         ax = fig.add_subplot(1, 1, 1)
@@ -266,18 +334,8 @@ class Preprocess:
         ax.grid()
         plt.show()
 
-    def standardize(self):
-        scaled_features = StandardScaler().fit_transform(self.df.values)
-        self.df = pd.DataFrame(
-            scaled_features, index=self.df.index, columns=self.df.columns)
-        return self
 
-    def normalize(self):
-        scaled_features = MinMaxScaler().fit_transform(self.df.values)
-        self.df = pd.DataFrame(
-            scaled_features, index=self.df.index, columns=self.df.columns)
-        return self
-
+    
     def add_product_features(self):
         features = self.df.columns
         for feature1 in features:
@@ -300,31 +358,3 @@ class Preprocess:
         features = self.df.columns
         for feature in features:
             self.df["log_" + feature] = self.df.apply(math.log(feature))
-
-
-def default():
-    return Preprocess(
-        "data/full.csv").code_output().drop_output().onehot_categorical()
-
-
-def pinpoint_pcs():
-    data = default()
-
-    data.standardize()
-    data.convert_to_pcs()
-    data.remove_low_impact(.25)
-    data.drop_outliers(3)
-
-    return data
-
-
-if __name__ == "__main__":
-    p = Preprocess(filepath="data/training_stratified_80.csv").code_output().onehot_encode()
-    print(len(p.df), len(p.y))
-    p.drop_outliers()
-    print(len(p.df), len(p.y))
-    # data = default()
-
-    # data.normalize()
-    # data = data.convert_to_pcs()
-    # data.graph_3d_pca()
