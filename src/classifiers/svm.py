@@ -1,31 +1,12 @@
 from .classifier import Classifier
 from ..preprocess import Preprocess
-from xgboost import XGBClassifier
+from sklearn import svm
 from sklearn.model_selection import cross_val_score
 
 
-class XGBoost(Classifier):
-    def __init__(self,
-                 n_estimators=60,
-                 eval_metric="logloss",
-                 scale_pos_weight=5.2,
-                 learning_rate=0.3,
-                 max_depth=6,
-                 gamma=0,
-                 subsample=1,
-                 colsample_bytree=1
-                 ):
-        self.c = XGBClassifier(
-            n_estimators=n_estimators,
-            eval_metric=eval_metric,
-            scale_pos_weight=scale_pos_weight,
-            learning_rate=learning_rate,
-            max_depth=max_depth,
-            gamma=gamma,
-            subsample=1,
-            colsample_bytree=colsample_bytree,
-            use_label_encoder=False
-        )
+class SVM(Classifier):
+    def __init__(self):
+        self.c = svm.SVC()
         self.pp = None
         self.ready = False
 

@@ -11,11 +11,13 @@ from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 import math
 
+
 class Preprocess:
     """DataFrame wrapper class to preprocess data.
     Unless stated otherwise, all non-static methods will return the instance they were called from.
     This is to facilitate method chaining.
     """
+
     def __init__(self, X=pd.DataFrame(), y=pd.DataFrame(), filepath: str = "", scaled=False):
         """Instantiates a new Preprocess object
 
@@ -32,7 +34,7 @@ class Preprocess:
             Whether the data is scaled.
         """
         self.set_data(X=X, y=y, filepath=filepath)
-        
+
         self.output_column = "Attrition_Flag"
 
         # Memorization fields
@@ -55,16 +57,16 @@ class Preprocess:
 
         if len(filepath) > 0:
             self.df, self.y = Preprocess.split_data(filepath)
-        
+
         self.scaled = scaled
 
         return self
-    
+
     @staticmethod
     def split_data(
-        filepath: str, 
+        filepath: str,
         output_column: str = "Attrition_Flag",
-    ) -> Tuple[pd.DataFrame, pd.DataFrame] :
+    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """Loads a CSV file into a pandas.DataFrame and then splits it into 
         feature matrix X and output vector y.
 
@@ -72,10 +74,10 @@ class Preprocess:
         ----------
         filepath: str
             Path of the file to load the data from.
-        
+
         output_column : str, default="Attrition_Flag"
             The column from the pandas.DataFrame to extract as an output vector
-        
+
         Returns
         -------
         X : pandas.DataFrame
@@ -107,7 +109,6 @@ class Preprocess:
         self.df.drop(columns, axis=1, inplace=True)
         return self
 
-
     def code_output(self, use_y=True) -> Preprocess:
         """Converts output vector into 0 or 1.
 
@@ -117,22 +118,23 @@ class Preprocess:
             If True, processes self.y. Otherwise, it will process
             self.df[self.output_column] instead.
         """
-        code = lambda x: 1 if x == "Attrited Customer" else 0
+        def code(x): return 1 if x == "Attrited Customer" else 0
         if use_y:
             if len(self.y) == 0:
                 raise ValueError("Output vector y is empty.")
 
             self.y = self.y.apply(code)
         else:
-            self.df[self.output_column] = self.df[self.output_column].apply(code)
-        
+            self.df[self.output_column] = self.df[self.output_column].apply(
+                code)
+
         return self
-    
 
     def onehot_encode(self,
-        columns=['Gender', 'Education_Level', 'Marital_Status', 'Income_Category', 'Card_Category'],
-        drop="first",
-    ) -> Preprocess:
+                      columns=['Gender', 'Education_Level', 'Marital_Status',
+                               'Income_Category', 'Card_Category'],
+                      drop="first",
+                      ) -> Preprocess:
         """Encodes categorical columns using one-hot encoding
 
         Parameters
@@ -144,19 +146,19 @@ class Preprocess:
             The drop policy for the OneHotEncoder.
             For more details, see https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.OneHotEncoder.html
         """
-        if self.oh_enc is None: # First call
+        if self.oh_enc is None:  # First call
             self.oh_enc = OneHotEncoder(drop=drop)
             self.oh_cols = columns
             self.oh_enc.fit(self.df[self.oh_cols])
-        
+
         onehot = self.oh_enc.transform(self.df[self.oh_cols]).toarray()
-        features = self.oh_enc.get_feature_names_out(self.oh_cols)
+        features = self.oh_enc.get_feature_names(self.oh_cols)
         self.remove_columns(columns=self.oh_cols)
         self.df = pd.concat(
             [self.df, pd.DataFrame(onehot, columns=features).astype(int)],
             axis=1
         )
-        
+
         return self
 
     def shuffle(self):
@@ -173,7 +175,7 @@ class Preprocess:
         ----------
         df: pandas.DataFrame
             The DataFrame with categorical data and continuous data.
-        
+
         Returns
         -------
         df: pandas.DataFrame
@@ -182,11 +184,12 @@ class Preprocess:
             The categorical part of df
         """
         if self.oh_enc is None:
-            raise ReferenceError("Please onehot encode the categorical data first!")
-        
+            raise ReferenceError(
+                "Please onehot encode the categorical data first!")
+
         features = self.oh_enc.get_feature_names_out(self.oh_cols)
         return self.df.drop(features, axis=1), self.df[features]
-    
+
     # ----------------- #
     # Feature Selection #
     # ----------------- #
@@ -201,10 +204,12 @@ class Preprocess:
             The maximum value for correlation before removing the feature
         """
         if len(self.correlated_features) == 0 or append:
-            corr = self.df.corr().abs() # Gets symmetrical square matrix
-            corr = corr.where(np.triu(np.ones(corr.shape), k=1).astype(bool)) # Select triangular matrix
+            corr = self.df.corr().abs()  # Gets symmetrical square matrix
+            # Select triangular matrix
+            corr = corr.where(np.triu(np.ones(corr.shape), k=1).astype(bool))
 
-            self.correlated_features.extend([ column for column in corr if any(corr[column] > threshold)])
+            self.correlated_features.extend(
+                [column for column in corr if any(corr[column] > threshold)])
 
         self.remove_columns(columns=self.correlated_features)
 
@@ -219,11 +224,12 @@ class Preprocess:
         threshold: float, default=0.01
             The minimum value of correlation to the target before removing the feature.
         """
-        if self.low_impact_features is None: # First call
+        if self.low_impact_features is None:  # First call
             df = pd.concat([self.df, self.y], axis=1)
             corr = df.corr()
-            corr_y = pd.DataFrame(corr[self.output_column]).sort_values(by=self.output_column)
-            self.low_impact_features = corr_y[(corr_y[self.output_column])<=threshold]\
+            corr_y = pd.DataFrame(corr[self.output_column]).sort_values(
+                by=self.output_column)
+            self.low_impact_features = corr_y[(corr_y[self.output_column]) <= threshold]\
                 .drop([self.output_column], axis=1)
 
         self.remove_columns(columns=self.low_impact_features)
@@ -257,7 +263,7 @@ class Preprocess:
             The explained variance for PC selection
         """
 
-        if not self.scaled: # Data has not been scaled
+        if not self.scaled:  # Data has not been scaled
             self.scale(method="minmax")
 
         df, cat_df = self.extract_categorical()
@@ -265,7 +271,7 @@ class Preprocess:
         if self.pca is None:
             self.pca = PCA(n_components='mle')
             self.pca.fit(df)
-        
+
         pc = self.pca.transform(df)
         pc_columns = ["PC" + str(i) for i in range(1, len(pc[0])+1)]
         pc_df = pd.DataFrame(data=pc, columns=pc_columns)
@@ -281,9 +287,9 @@ class Preprocess:
         method: {"standard", "minmax"}, default="standard"
             The scaler to use to scale the data
         """
-        if self.scaled: # Data is already scaled
+        if self.scaled:  # Data is already scaled
             return self
-        
+
         if self.scaler is None:
             if method == "standard":
                 self.scaler = StandardScaler()
@@ -292,13 +298,13 @@ class Preprocess:
             else:
                 raise ValueError("Invalid method for scaling.")
             self.scaler.fit(self.df)
-        
+
         self.scaled = True
         scaled_features = self.scaler.transform(self.df.values)
-        self.df = pd.DataFrame(scaled_features, 
-            index=self.df.index, columns=self.df.columns)
+        self.df = pd.DataFrame(scaled_features,
+                               index=self.df.index, columns=self.df.columns)
         return self
-        
+
     def graph_2d_pca(self):
         fig = plt.figure(figsize=(8, 8))
         ax = fig.add_subplot(1, 1, 1)
@@ -334,8 +340,6 @@ class Preprocess:
         ax.grid()
         plt.show()
 
-
-    
     def add_product_features(self):
         features = self.df.columns
         for feature1 in features:
