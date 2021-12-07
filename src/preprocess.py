@@ -190,9 +190,9 @@ class Preprocess:
         features = self.oh_enc.get_feature_names_out(self.oh_cols)
         return self.df.drop(features, axis=1), self.df[features]
 
-    # ----------------- #
-    # Feature Selection #
-    # ----------------- #
+    # ------------------- #
+    # Feature Engineering #
+    # ------------------- #
 
     def remove_correlated_features(self, threshold=0.9, append=False):
         """Removes features that have a correlation above the threshold
@@ -226,7 +226,7 @@ class Preprocess:
         """
         if self.low_impact_features is None:  # First call
             df = pd.concat([self.df, self.y], axis=1)
-            corr = df.corr()
+            corr = df.corr().abs*()
             corr_y = pd.DataFrame(corr[self.output_column]).sort_values(
                 by=self.output_column)
             self.low_impact_features = corr_y[(corr_y[self.output_column]) <= threshold]\
@@ -304,6 +304,49 @@ class Preprocess:
         self.df = pd.DataFrame(scaled_features,
                                index=self.df.index, columns=self.df.columns)
         return self
+    
+    def combine_features(self, features: List[str], reducer, output="", sep="|"):
+        """Combine the given features into another.
+        Does not remove the combined features!
+
+        Parameters
+        ----------
+        features: List[str]
+            The features to be combined.
+        reducer: Callable(x,y) -> z
+            A reducer lambda function that combines two values.
+        output: str, default=""
+            The name of the output feature. If left empty, it will simply
+            concatenate the input features.
+        sep: str, default="|"
+            If using concatenation, this is the separator.
+        """
+        if len(features) < 2:
+            return self
+
+        name = output if len(output) > 0 else sep.join(features)
+        input_df = self.df[features]
+        output_df = reducer(input_df[features[0]], input_df[features[1]])
+        for feature in features[2:]:
+            output_df = reducer(output_df, input_df[feature])
+
+        self.df[name] = output_df
+        return self
+
+    def get_correlation(self, feature):
+        """Get the correlation between the feature and the output (y)
+        DOES NOT RETURN SELF
+        Parameters
+        ----------
+        feature: str
+            The feature to retrieve correlation of.
+        """
+        if feature not in self.df.columns:
+            raise ReferenceError(
+                f'Feature {f} is not a column in the data'
+            )
+        
+        return self.df[feature].corr(self.y)
 
     def graph_2d_pca(self):
         fig = plt.figure(figsize=(8, 8))
