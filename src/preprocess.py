@@ -226,7 +226,7 @@ class Preprocess:
         X = pd.DataFrame(scaled, index=X.index, columns=X.columns)
         return X, y
 
-    def reduce_features(self, features, reducer, output="", sep="|"):
+    def reduce_features(self, features, reducer, output="", sep="|", drop=True):
         """Reduces the given features into another.
         Does not remove the reduced features!
 
@@ -242,8 +242,8 @@ class Preprocess:
         sep: str, default="|"
             If using concatenation, this is the separator.
         """
-        return self.add(partial(self._reduce_features, features, reducer, output, sep))
-    def _reduce_features(self, features, reducer, output, sep, X, y): 
+        return self.add(partial(self._reduce_features, features, reducer, output, sep, drop))
+    def _reduce_features(self, features, reducer, output, sep, drop, X, y): 
         name = output if len(output) > 0 else sep.join(features)
         input_df = X[features]
         output_df = reducer(input_df[features[0]], input_df[features[1]])
@@ -251,6 +251,10 @@ class Preprocess:
             output_df = reducer(output_df, input_df[feature])
 
         X[name] = output_df
+
+        if drop:
+            X,y = self._remove_columns(features, X, y)
+        
         return X, y
     
     def map_features(self, features, mapper, output=""):
