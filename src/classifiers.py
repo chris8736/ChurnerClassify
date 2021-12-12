@@ -42,7 +42,8 @@ class Classifier (BaseEstimator):
             s = cross_val_score(self, data.X, y=data.y, 
                 cv=StratifiedKFold(n_splits=5, shuffle=True),
                 scoring=self.auc_precision_recall, error_score='raise')
-            scores.append(s)
+            scores.extend(s.tolist())
+
         return scores
     
     def predict_proba(self, X):

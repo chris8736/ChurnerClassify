@@ -7,6 +7,7 @@ from sklearn.decomposition import PCA
 
 from scipy import stats
 
+from re import findall
 
 class Preprocess:
     """DataFrame wrapper class to preprocess data.
@@ -312,3 +313,12 @@ class Preprocess:
             raise ReferenceError(f'Feature {f} is not a column of the data')
         
         return X[feature].corr(y)
+   
+    def __str__(self):
+        buffer = []
+        for f in self.pipeline:
+            func = findall(r"Preprocess._.+?\b", str(f.func))
+            args = str(f.args)
+            buffer.append(f"{func}{args}")
+        
+        return "->".join(buffer)
