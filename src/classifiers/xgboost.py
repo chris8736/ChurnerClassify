@@ -15,6 +15,15 @@ class XGBoost(Classifier):
         
         # Initialize super class
         super().__init__()
+        self.n_estimators=n_estimators
+        self.eval_metric=eval_metric
+        self.scale_pos_weight=scale_pos_weight
+        self.learning_rate=learning_rate
+        self.max_depth=max_depth
+        self.gamma=gamma
+        self.subsample=1
+        self.colsample_bytree=colsample_bytree
+        self.use_label_encoder=False
 
         # Create classifier
         self.c = XGBClassifier(

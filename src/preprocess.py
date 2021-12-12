@@ -58,6 +58,8 @@ class Preprocess:
         if len(filepath) > 0:
             self.df, self.y = Preprocess.split_data(filepath)
 
+        self.df = self.df.reset_index(drop=True)
+        self.y = self.y.reset_index(drop=True)
         self.scaled = scaled
 
         return self
@@ -155,8 +157,6 @@ class Preprocess:
             self.oh_enc.transform(self.df[self.oh_cols]).toarray(),
             columns=self.oh_enc.get_feature_names_out(self.oh_cols)
         ).astype(int)
-        print(self.df)
-        print(onehot_df)
         self.remove_columns(columns=self.oh_cols)
         self.df = pd.concat(
             [self.df, onehot_df],
