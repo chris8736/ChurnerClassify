@@ -1,23 +1,17 @@
-from src.classifiers.xgboost import XGBoost
+from src.classifiers import XGBoost
 from src.preprocess import Preprocess
 from src.data import Data
 
 if __name__ == "__main__":
     data = Data()
 
-    c = XGBoost()
-    scores = c.cross_validate(data.full)
+    # pp = Preprocess().reduce_features(["Dependent_count", "Total_Relationship_Count"], lambda x,y: x*y)\
+    #     .map_features(["Customer_Age"], lambda x: x*12, output="_in_months")
+    # X,y=pp.execute(data.training.X, data.training.y)
+    # Xt, yt = pp.execute(data.testing.X, data.testing.y)
+
+    # print(X,y)
+
+    c1 = XGBoost()
+    scores = c1.cross_validate(data.training)
     print(scores)
-
-    # p = Preprocess(filepath="data/training_stratified_80.csv").code_output()
-    # p.combine_features(["Total_Relationship_Count","Credit_Limit","Customer_Age"], lambda x,y: x*y)
-    # print(p.get_correlation("Total_Relationship_Count"))
-
-    # c = XGBoost()
-    # print(c.cross_validate("data/training_stratified_80.csv"))
-
-    # c.train("data/training_stratified_80.csv")
-    # c.predict("data/testing_stratified_20.csv")
-
-    # e = Evaluate(c)
-    # e.visualize()

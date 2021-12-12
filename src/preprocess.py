@@ -1,225 +1,135 @@
-from __future__ import annotations
-from typing import List, Tuple
+from functools import partial
 import pandas as pd
 import numpy as np
-from scipy import stats
 
-# SKLearn Imports
 from sklearn.preprocessing import OneHotEncoder, MinMaxScaler, StandardScaler
 from sklearn.decomposition import PCA
 
-import matplotlib.pyplot as plt
-import math
+from scipy import stats
 
 
 class Preprocess:
     """DataFrame wrapper class to preprocess data.
-    Unless stated otherwise, all non-static methods will return the instance they were called from.
-    This is to facilitate method chaining.
+    All methods beginning with understand are require to take X and y as the last
+    two positional arguments, even if one is not used. They must also return X, y
+
+    All other methods return self, unless stated otherwise.
     """
 
-    def __init__(self, X=pd.DataFrame(), y=pd.DataFrame(), filepath: str = "", scaled=False):
-        """Instantiates a new Preprocess object
+    def __init__(self, use_default = True):
+        """Instantiates a new Preprocess pipeline
 
         Parameters
         ----------
-        X : pandas.DataFrame, default=[]
-            Feature vector to preprocess
-        y : pandas.DataFrama, default=[]
-            Output vector associated with X
-        filepath : str, default=""
-            If not empty, will overwrite X and y with data read from the given path.
-            Note: shorthand for loading data and then passing it through X and y.
-        scaled : bool, default=False
-            Whether the data is scaled.
+        use_default : boolean, default=True
+            Use default pipeline.
         """
-        self.set_data(X=X, y=y, filepath=filepath)
-
-        self.output_column = "Attrition_Flag"
-
-        # Memorization fields
-        self.oh_enc = None                  # One Hot Encoder
-        self.oh_cols = None                 # One Hot Columns
-        self.correlated_features = []       # Correlated features to drop
-        self.low_impact_features = None     # Low impact features to drop
-        self.pca = None                     # PCA model
-        self.scaler = None                  # Scaler
-
-    def set_data(self, X=pd.DataFrame(), y=pd.DataFrame(), filepath: str = "", scaled=False):
-        """ Set the data to preprocessed.
-
-        Parameters
-        ----------
-        See the constructor's docstring for information.
+        self.pipeline = []
+        if use_default:
+            self.reindex().code_output().remove_columns().onehot_encode()
+        
+        self.oh_enc = None
+        self.oh_cols = ['Gender', 'Education_Level', 'Marital_Status','Income_Category', 'Card_Category']
+        self.correlated_features = []
+        self.low_impact_features = []
+        self.pca = None
+        self.scaled = False
+        self.scaler = None
+    
+    def execute(self, X, y):
+        """Runs the built pipeline against X,y and returns the preprocessed frames
         """
-        self.df = X
-        self.y = y
+        self.scaled = False
+        for f in self.pipeline:
+            X,y = f(X,y)
+        
+        return X,y
 
-        if len(filepath) > 0:
-            self.df, self.y = Preprocess.split_data(filepath)
-
-        self.df = self.df.reset_index(drop=True)
-        self.y = self.y.reset_index(drop=True)
-        self.scaled = scaled
-
+    def add(self, f):
+        self.pipeline.append(f)
         return self
-
-    @staticmethod
-    def split_data(
-        filepath: str,
-        output_column: str = "Attrition_Flag",
-    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
-        """Loads a CSV file into a pandas.DataFrame and then splits it into 
-        feature matrix X and output vector y.
-
-        Parameters
-        ----------
-        filepath: str
-            Path of the file to load the data from.
-
-        output_column : str, default="Attrition_Flag"
-            The column from the pandas.DataFrame to extract as an output vector
-
-        Returns
-        -------
-        X : pandas.DataFrame
-            Feature matrix X
-        y : pandas.DataFrame
-            Output vector y
+    
+    def code_output(self):
+        """Converts output vector into 0 or 1
         """
-        df = pd.read_csv(filepath)
-        return (df.drop([output_column], axis=1), df[output_column])
+        return self.add(partial(self._code_output))
+    def _code_output(self, X, y):
+        if y is None:
+            return x, None
+        
+        code = lambda x: 1 if x == "Attrited Customer" else 0
+        return X, y.apply(code)
 
-    # ---------------- #
-    # Data Structuring #
-    # ---------------- #
+    def reindex(self):
+        """Reindex the DataFrame
+        """
+        return self.add(partial(self._reindex))
+    def _reindex(self, X, y):
+        return X.reset_index(drop=True), y.reset_index(drop=True) if y is not None else None
 
-    def remove_columns(self, columns: List[str] = ["CLIENTNUM"]) -> Preprocess:
+    def remove_columns(self, columns = ["CLIENTNUM"]):
         """Removes columns from the DataFrame.
 
         Parameters
         ----------
         columns: List[str], default=["CLIENTNUM"]
-            Columns to remove from the DataFrame
+           Columns to remove from the DataFrame
         """
+        return self.add(partial(self._remove_columns, columns))
+    def _remove_columns(self, columns, X, y):
         # Check that all columns exist in the DataFrame
-        if not set(columns).issubset(self.df.columns):
-            no_exist = [c for c in columns if c not in self.df.columns]
+        if not set(columns).issubset(X.columns):
+            no_exist = [c for c in columns if c not in X.columns]
             raise LookupError(
                 f"One or more columns were not found in the DataFrame: {no_exist}")
 
-        self.df.drop(columns, axis=1, inplace=True)
-        return self
+        return X.drop(columns, axis=1), y
 
-    def code_output(self, use_y=True) -> Preprocess:
-        """Converts output vector into 0 or 1.
-
-        Parameters
-        ----------
-        use_y : bool, default=True
-            If True, processes self.y. Otherwise, it will process
-            self.df[self.output_column] instead.
-        """
-        def code(x): return 1 if x == "Attrited Customer" else 0
-        if use_y:
-            if len(self.y) == 0:
-                raise ValueError("Output vector y is empty.")
-
-            self.y = self.y.apply(code)
-        else:
-            self.df[self.output_column] = self.df[self.output_column].apply(
-                code)
-
-        return self
-
-    def onehot_encode(self,
-                      columns=['Gender', 'Education_Level', 'Marital_Status',
-                               'Income_Category', 'Card_Category'],
-                      drop="first",
-                      ) -> Preprocess:
+    def onehot_encode(self, drop="first"):
         """Encodes categorical columns using one-hot encoding
 
         Parameters
         ----------
-        columns : List[str], default=['Gender', 'Education_Level', 'Marital_Status', 'Income_Category', 'Card_Category']
-            Columns to one-hot encode. This is memorized; subsequent calls to
-            onehot_encode will use the same value.
         drop : str, default="first"
             The drop policy for the OneHotEncoder.
             For more details, see https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.OneHotEncoder.html
         """
+        return self.add(partial(self._onehot_encode, drop))
+    def _onehot_encode(self, drop, X, y):
         if self.oh_enc is None:  # First call
             self.oh_enc = OneHotEncoder(drop=drop)
-            self.oh_cols = columns
-            self.oh_enc.fit(self.df[self.oh_cols])
+            self.oh_enc.fit(X[self.oh_cols])
 
         onehot_df = pd.DataFrame(
-            self.oh_enc.transform(self.df[self.oh_cols]).toarray(),
+            self.oh_enc.transform(X[self.oh_cols]).toarray(),
             columns=self.oh_enc.get_feature_names_out(self.oh_cols)
         ).astype(int)
-        self.remove_columns(columns=self.oh_cols)
-        self.df = pd.concat(
-            [self.df, onehot_df],
-            axis=1
-        )
+        X,y = self._remove_columns(self.oh_cols,X,y)
 
-        return self
+        return pd.concat([X, onehot_df], axis=1), y
 
-    def shuffle(self):
-        """Shuffles the DataFrame
-        """
-        self.df = self.df.sample(frac=1).reset_index(drop=True)
-        return self
-
-    def extract_categorical(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
-        """Extracts the non-categorical and the categorical data from self.df
-        Note: this method does not return self!
-
-        Parameters
-        ----------
-        df: pandas.DataFrame
-            The DataFrame with categorical data and continuous data.
-
-        Returns
-        -------
-        df: pandas.DataFrame
-            The continuous part of df
-        cat_df: pandas.DataFrame
-            The categorical part of df
-        """
-        if self.oh_enc is None:
-            raise ReferenceError(
-                "Please onehot encode the categorical data first!")
-
-        features = self.oh_enc.get_feature_names_out(self.oh_cols)
-        return self.df.drop(features, axis=1), self.df[features]
-
-    # ------------------- #
-    # Feature Engineering #
-    # ------------------- #
-
-    def remove_correlated_features(self, threshold=0.9, append=False):
+    def remove_correlated_features(self, threshold=0.9):
         """Removes features that have a correlation above the threshold
         Memorizes correlated features.
 
         Parameters
         ----------
-        threshold: float, default=0.95
+        threshold: float, default=0.9
             The maximum value for correlation before removing the feature
         """
-        if len(self.correlated_features) == 0 or append:
-            corr = self.df.corr().abs()  # Gets symmetrical square matrix
+        return self.add(partial(self._remove_correlated_features, threshold))
+    def _remove_correlated_features(self, threshold, X, y):
+        if len(self.correlated_features) == 0:
+            corr = X.corr().abs()  # Gets symmetrical square matrix
             # Select triangular matrix
             corr = corr.where(np.triu(np.ones(corr.shape), k=1).astype(bool))
 
             self.correlated_features.extend(
                 [column for column in corr if any(corr[column] > threshold)])
 
-        self.remove_columns(columns=self.correlated_features)
+        return self._remove_columns(self.correlated_features,X,y)
 
-        return self
-
-    def remove_low_impact(self, threshold=0.001):
+    def remove_low_impact(self, threshold=0.01):
         """Removes features with low correlation to the target
         Memorizes low impact features.
 
@@ -228,17 +138,17 @@ class Preprocess:
         threshold: float, default=0.01
             The minimum value of correlation to the target before removing the feature.
         """
-        if self.low_impact_features is None:  # First call
-            df = pd.concat([self.df, self.y], axis=1)
-            corr = df.corr().abs*()
-            corr_y = pd.DataFrame(corr[self.output_column]).sort_values(
-                by=self.output_column)
-            self.low_impact_features = corr_y[(corr_y[self.output_column]) <= threshold]\
-                .drop([self.output_column], axis=1)
-
-        self.remove_columns(columns=self.low_impact_features)
-
-        return self
+        return self.add(partial(self._remove_low_impact, threshold))
+    def _remove_low_impact(self, threshold, X, y):
+        output_column = "Attrition_Flag"
+        if len(self.low_impact_features) == 0:  # First call
+            df = pd.concat([X, y], axis=1)
+            corr = df.corr().abs()
+            corr_y = pd.DataFrame(corr[output_column]).sort_values(
+                by=output_column)
+            corr_y = corr_y[(corr_y[output_column]) <= threshold].drop([output_column], axis=1)
+            self.low_impact_features.extend(corr_y.index.tolist())
+        return self._remove_columns(self.low_impact_features, X, y)
 
     def drop_outliers(self, threshold=3):
         """Drops rows that are considered outliers
@@ -248,40 +158,38 @@ class Preprocess:
         threshold: float, default=3
             The maximum magnitude of a zscore before removal
         """
-        df, _ = self.extract_categorical()
-
+        return self.add(partial(self._drop_outliers, threshold))
+    def _drop_outliers(self, threshold, X, y):
+        df, _ = self.extract_categorical(X)
         idx = (np.abs(stats.zscore(df)) < threshold).all(axis=1)
-        self.df = self.df[idx]
-        self.y = self.y[idx]
 
-        return self
-
-    def convert_to_pcs(self, ignoreCategorical=True, variance=0.95):
+        return X[idx], y[idx]
+        
+    def convert_to_pcs(self, ignoreCategorical=True):
         """Convert df into its principal components.
 
         Parameters
         ----------
         ignoreCategorical: bool, default = True
             Whether to ignore categorical data or not.
-        variance: [0,1], default=0.95
-            The explained variance for PC selection
         """
+        return self.add(partial(self._convert_to_pcs, ignoreCategorical))
+    def _convert_to_pcs(self, ignoreCategorical, X, y):
+        if not self.scaled: # Data has not been scaled
+            X,y = self._scale("minmax", X, y)
 
-        if not self.scaled:  # Data has not been scaled
-            self.scale(method="minmax")
-
-        df, cat_df = self.extract_categorical()
+        # df, cat_df = self.extract_categorical(X)
 
         if self.pca is None:
             self.pca = PCA(n_components='mle')
-            self.pca.fit(df)
-
-        pc = self.pca.transform(df)
+            self.pca.fit(X)
+        
+        pc = self.pca.transform(X)
         pc_columns = ["PC" + str(i) for i in range(1, len(pc[0])+1)]
         pc_df = pd.DataFrame(data=pc, columns=pc_columns)
 
-        self.df = pd.concat([pc_df, cat_df], axis=1)
-        return self
+        # X = df if not ignoreCategorical else pd.concat([pc_df, cat_df], axis=1)
+        return pc_df, y
 
     def scale(self, method="standard"):
         """Scale the data
@@ -291,8 +199,10 @@ class Preprocess:
         method: {"standard", "minmax"}, default="standard"
             The scaler to use to scale the data
         """
-        if self.scaled:  # Data is already scaled
-            return self
+        return self.add(partial(self._scale, method))
+    def _scale(self, method, X, y):
+        if self.scaled:
+            return X, y
 
         if self.scaler is None:
             if method == "standard":
@@ -300,23 +210,21 @@ class Preprocess:
             elif method == "minmax":
                 self.scaler = MinMaxScaler()
             else:
-                raise ValueError("Invalid method for scaling.")
-            self.scaler.fit(self.df)
-
+                raise ValueError("Invalid method for scaling")
+            self.scaler.fit(X)
         self.scaled = True
-        scaled_features = self.scaler.transform(self.df.values)
-        self.df = pd.DataFrame(scaled_features,
-                               index=self.df.index, columns=self.df.columns)
-        return self
-    
-    def combine_features(self, features: List[str], reducer, output="", sep="|"):
-        """Combine the given features into another.
-        Does not remove the combined features!
+        scaled = self.scaler.transform(X)
+        X = pd.DataFrame(scaled, index=X.index, columns=X.columns)
+        return X, y
+
+    def reduce_features(self, features, reducer, output="", sep="|"):
+        """Reduces the given features into another.
+        Does not remove the reduced features!
 
         Parameters
         ----------
         features: List[str]
-            The features to be combined.
+            The features to be reduced.
         reducer: Callable(x,y) -> z
             A reducer lambda function that combines two values.
         output: str, default=""
@@ -325,87 +233,76 @@ class Preprocess:
         sep: str, default="|"
             If using concatenation, this is the separator.
         """
-        if len(features) < 2:
-            return self
-
+        return self.add(partial(self._reduce_features, features, reducer, output, sep))
+    def _reduce_features(self, features, reducer, output, sep, X, y): 
         name = output if len(output) > 0 else sep.join(features)
-        input_df = self.df[features]
+        input_df = X[features]
         output_df = reducer(input_df[features[0]], input_df[features[1]])
         for feature in features[2:]:
             output_df = reducer(output_df, input_df[feature])
 
-        self.df[name] = output_df
-        return self
+        X[name] = output_df
+        return X, y
+    
+    def map_features(self, features, mapper, output=""):
+        """Maps the given features onto new features
+        
+        Parameters
+        ----------
+        features: List[str]
+            The features to be mapped from
+        mapper: Callable(x) -> y
+            A mapper lambda function that maps from x to y
+        output: str, default=""
+            A str to append to the new feature name. If left empty, it will perform
+            the mapping in-place
+        """
+        return self.add(partial(self._map_features, features, mapper, output))
+    def _map_features(self, features, mapper, output, X, y):
+        for feature in features:
+            if len(output) == 0:
+                X[feature] = X[feature].apply(mapper)
+            else:
+                X[feature+output] = X[feature].apply(mapper)
+        return X,y
+    
+    ######################
+    ### HELPER METHODS ###
+    ######################
+    def extract_categorical(self, df):
+        """Extracts the non-categorical and the categorical data from self.df
+        Note: this method does not return self!
 
-    def get_correlation(self, feature):
-        """Get the correlation between the feature and the output (y)
-        DOES NOT RETURN SELF
+        Parameters
+        ----------
+        df: pandas.DataFrame
+            The DataFrame with categorical data and non-categorical data.
+
+        Returns
+        -------
+        df: pandas.DataFrame
+            The non-categorical part of df
+        cat_df: pandas.DataFrame
+            The categorical part of df
+        """
+        if self.oh_enc is None:
+            raise ReferenceError(
+                "Please onehot encode the categorical data first!")
+
+        features = self.oh_enc.get_feature_names_out(self.oh_cols)
+        return df.drop(features, axis=1), df[features]
+
+    def get_correlation(self, feature, X, y):
+        """Get the correlation between the features and the output
+
         Parameters
         ----------
         feature: str
-            The feature to retrieve correlation of.
+            The feature to retrieve correlation of
+        X: the feature matrix
+        y: the output vector
         """
-        if feature not in self.df.columns:
-            raise ReferenceError(
-                f'Feature {f} is not a column in the data'
-            )
+        if feature not in X.columns:
+            raise ReferenceError(f'Feature {f} is not a column of the data')
         
-        return self.df[feature].corr(self.y)
-
-    def graph_2d_pca(self):
-        fig = plt.figure(figsize=(8, 8))
-        ax = fig.add_subplot(1, 1, 1)
-        ax.set_xlabel('Principal Component 1', fontsize=15)
-        ax.set_ylabel('Principal Component 2', fontsize=15)
-        ax.set_title('2 component PCA', fontsize=20)
-        ax.set_facecolor('gray')
-        ax.scatter(self.df['PC1'],
-                   self.df['PC2'], c=self.output, cmap='gray')
-
-        # for i in range(len(X)):
-        #    ax.annotate(i, (principalDf['principal component 1'][i],
-        #                    principalDf['principal component 2'][i]))
-
-        ax.grid()
-        plt.show()
-
-    def graph_3d_pca(self):
-        # plot pc1, pc2, and pc3 axes
-        fig = plt.figure()
-        ax = plt.axes(projection='3d')
-
-        # labels
-        ax.set_xlabel('Principal Component 1', fontsize=8)
-        ax.set_ylabel('Principal Component 2', fontsize=8)
-        ax.set_zlabel('Principal Component 3', fontsize=8)
-        ax.set_title('3 component PCA', fontsize=20)
-        ax.set_facecolor('gray')
-        ax.scatter3D(self.df['PC1'],
-                     self.df['PC2'],
-                     self.df['PC3'], c=self.output, cmap='gray')
-
-        ax.grid()
-        plt.show()
-
-    def add_product_features(self):
-        features = self.df.columns
-        for feature1 in features:
-            for feature2 in features:
-                self.df[feature1 + "_*_" + feature2] = self.df[feature1] * \
-                    self.df[feature2]
-                #print(feature1 + "_*_" + feature2)
-        return self
-
-    def add_quotient_features(self):
-        features = self.df.columns
-        for feature1 in features:
-            for feature2 in features:
-                self.df[feature1 + "_/_" + feature2] = self.df[feature1] / \
-                    (self.df[feature2] + 1)
-                #print(feature1 + "_*_" + feature2)
-        return self
-
-    def add_log_features(self):
-        features = self.df.columns
-        for feature in features:
-            self.df["log_" + feature] = self.df.apply(math.log(feature))
+        return X[feature].corr(y)
