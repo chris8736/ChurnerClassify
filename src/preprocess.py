@@ -91,6 +91,12 @@ class Preprocess:
               str(threshold) + ": " + str(cols_to_remove))
         return self
 
+    def correlation_pairs(self):
+        c = self.df.corr().abs()
+        s = c.unstack()
+        so = s.sort_values(kind="quicksort")
+        return so
+
     def print_correlation_pairs(self):
         c = self.df.corr().abs()
         s = c.unstack()
@@ -113,7 +119,15 @@ class Preprocess:
         print("Removed the following features as correlation with output was <" +
               str(threshold) + ": " + str(cols_to_remove))
         self.remove_columns(["Output"])
-        return self
+        return
+
+    def output_correlation(self):
+        self.df["Output"] = self.output
+        cor = self.df.corr()
+        cor_target = cor["Output"]
+        so = cor_target.sort_values(kind="quicksort")
+        self.remove_columns(["Output"])
+        return so[:-1]
 
     def print_output_correlation(self):
         self.df["Output"] = self.output
