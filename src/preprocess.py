@@ -151,11 +151,15 @@ class Preprocess:
             self.oh_cols = columns
             self.oh_enc.fit(self.df[self.oh_cols])
 
-        onehot = self.oh_enc.transform(self.df[self.oh_cols]).toarray()
-        features = self.oh_enc.get_feature_names(self.oh_cols)
+        onehot_df = pd.DataFrame(
+            self.oh_enc.transform(self.df[self.oh_cols]).toarray(),
+            columns=self.oh_enc.get_feature_names_out(self.oh_cols)
+        ).astype(int)
+        print(self.df)
+        print(onehot_df)
         self.remove_columns(columns=self.oh_cols)
         self.df = pd.concat(
-            [self.df, pd.DataFrame(onehot, columns=features).astype(int)],
+            [self.df, onehot_df],
             axis=1
         )
 
