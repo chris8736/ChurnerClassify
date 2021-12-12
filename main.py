@@ -29,17 +29,15 @@ def select_pp(cls, n=2, pps=[]):
         
         results.append(pp_score(pp, mean(scores), stdev(scores)))
     
-    results.sort(key=lambda pp: pp.mean)
+    results.sort(key=lambda pp: pp.mean, reverse=True)
     return results
 
 
 if __name__ == "__main__":
     results = select_pp(XGBoost(),pps=[
         Preprocess(),
-        Preprocess().scale(),
         Preprocess().convert_to_pcs(),
-        Preprocess().remove_correlated_features().remove_low_impact(),
-        Preprocess().remove_correlated_features().remove_low_impact().reduce_features(["Total_Trans_Amt", "Total_Trans_Ct"], lambda x,y: x/y, output="Avg_Trans_Amt").remove_columns(["Total_Trans_Amt", "Total_Trans_Ct"])
+        Preprocess().convert_to_pcs(ignoreCategorical=False)
     ])
 
     for r in results[:3]:

@@ -185,18 +185,20 @@ class Preprocess:
         if not self.scaled: # Data has not been scaled
             X,y = self._scale("minmax", X, y)
 
-        # df, cat_df = self.extract_categorical(X)
+        df = X
+        if ignoreCategorical:
+            df, cat_df = self.extract_categorical(X)
 
         if self.pca is None:
             self.pca = PCA(n_components='mle')
-            self.pca.fit(X)
+            self.pca.fit(df)
         
-        pc = self.pca.transform(X)
+        pc = self.pca.transform(df)
         pc_columns = ["PC" + str(i) for i in range(1, len(pc[0])+1)]
         pc_df = pd.DataFrame(data=pc, columns=pc_columns)
 
-        # X = df if not ignoreCategorical else pd.concat([pc_df, cat_df], axis=1)
-        return pc_df, y
+        X = pd.concat([pc_df, cat_df], axis=1) if ignoreCategorical else df
+        return X, y
 
     def scale(self, method="standard"):
         """Scale the data
