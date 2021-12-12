@@ -7,54 +7,25 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import classification_report
 from dataclasses import dataclass
 
-
 @dataclass
-class pp_score:
-    pp: Preprocess
-    mean: float
-    std_dev: float
-
-    def __repr__(self):
-        return f"PP: {self.pp.__str__()}, mean: {self.mean}, stdev: {self.std_dev}"
-
-
-def select_pp(cls, n=2, pps=[]):
-    data = Data()
-    results = []
-    idx = 1
-    total = n*len(pps)
-    for pp in pps:
-        scores = []
-        for i in range(n):
-            print(f"Iteration: {idx}/{total}")
-            cls.pp = pp
-            scores.extend(cls.cross_validate(data.training))
-            idx += 1
-
-        results.append(pp_score(pp, mean(scores), stdev(scores)))
-
-    results.sort(key=lambda pp: pp.mean, reverse=True)
-    return results
-
-@dataclass
-class hp_score:
+class score:
     c: Classifier
     params: dict
     mean: float
     std_dev: float
     def __repr__(self):
-        return f"C: {self.c.__str__()}, params: {self.params}, mean: {self.mean}, stdev: {self.std_dev}"
+        return f"C: {self.c.__str__()}, mean: {self.mean}, stdev: {self.std_dev},\nPP: {self.params['pp'].__str__()},\nParams: { {k:v for k,v in self.params.items() if k != 'pp'} }"
 
-def select_hyperparameters(classifiers, n=2):
+def select(classifiers, n=2):
     data = Data()
     results = []
     
     for (c, params) in classifiers:
-        clf = GridSearchCV(c, params, scoring=Classifier.auc_precision_recall)
-        clf.fit(data.training.X, data.training.y)
+        clf = GridSearchCV(c, params, scoring=Classifier.auc_precision_recall, verbose=3)
+        clf.fit(data.full.X, data.full.y)
 
         results.extend([
-            hp_score(c, params, mean, std)
+            score(c, params, mean, std)
             for mean, std, params in zip(
                 clf.cv_results_["mean_test_score"],
                 clf.cv_results_["std_test_score"],
@@ -62,26 +33,32 @@ def select_hyperparameters(classifiers, n=2):
             )
         ])
 
+    results.sort(key=lambda r: r.mean, reverse=True)
     return results
 
 if __name__ == "__main__":
-    classifiers = [(XGBoost(), {
-        'n_estimators': [60,80]
-    })]
-    hp_results = select_hyperparameters(classifiers)
-    for r in hp_results:
-        print(r)
-    # results = select_pp(XGBoost(), n=10, pps=[
-    #     Preprocess(),
-    #     # PCA Experiment
-    #     # Preprocess().convert_to_pcs(ignoreCategorical=False),
-    #     # Preprocess().convert_to_pcs(),
-    #     # Average_Open_To_Buy
-    #     # Preprocess().remove_columns(columns=["Avg_Open_To_Buy"])
-    #     # Scalers
-    #     # Preprocess().scale(),
-    #     # Preprocess().scale(method="minmax"),
-    # ])
+    # Different Preprocess pipelines
+    pp_base = Preprocess()
+    pp_pcs_cat = Preprocess().convert_to_pcs(ignoreCategorical=False)
+    pp_pcs_no_cat = Preprocess().convert_to_pcs(ignoreCategorical=True)
+    pp_scale_std = Preprocess().scale()
+    pp_scale_mm = Preprocess().scale(method="minmax")
 
-    # for r in results:
-    #     print(r)
+    grid = []
+    grid.append((XGBoost(), {
+        "pp": [pp_base, pp_pcs_cat, pp_scale_std],
+        "learning_rate": [0.3, 1, 2]
+    }))
+
+    results = select(grid)
+    print("=====================")
+    print("Results of GridSearch")
+    print("=====================")
+    for i,r in enumerate(results):
+        print(f"--------------------------\n{i+1}. {r}")
+
+    # Get final metrics for the assignment
+    best = results[0]
+    best.c.set_params(**best.params)
+    scores = best.c.cross_validate(Data().full, n=20)
+    print(f"Results of 20x5-fold Cross Validation:\n\tmean:{mean(scores)}\tstdev:{stdev(scores)}")

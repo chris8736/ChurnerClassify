@@ -41,13 +41,20 @@ class Classifier (BaseEstimator):
         for i in range(n):
             s = cross_val_score(self, data.X, y=data.y, 
                 cv=StratifiedKFold(n_splits=5, shuffle=True),
-                scoring=self.auc_precision_recall, error_score='raise')
+                scoring=self.auc_precision_recall, error_score='raise', verbose=3)
             scores.extend(s.tolist())
+            print(f"Cross Validate Iteration: {i+1}/{n}")
 
         return scores
     
     def predict_proba(self, X):
         return self.c.predict_proba(X)
+    
+    def set_params(self, **params):
+        if "pp" in params:
+            self.pp = params.pop("pp")
+        self.c.set_params(**params)
+        return self
 
     @staticmethod
     def auc_precision_recall(estimator, X, y):
