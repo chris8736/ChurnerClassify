@@ -62,7 +62,7 @@ class Preprocess:
         return self.add(partial(self._code_output))
     def _code_output(self, X, y):
         if y is None:
-            return x, None
+            return X, None
         
         code = lambda x: 1 if x == "Attrited Customer" else 0
         return X, y.apply(code)

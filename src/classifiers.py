@@ -32,7 +32,7 @@ class Classifier (BaseEstimator):
         if not self.ready:
             raise Exception(
                 "Please train the classifier before trying to predict.")
-        X = self.preprocess(X)
+        X,_ = self.preprocess(X, None)
 
         return self.c.predict(X)
 
