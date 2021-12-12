@@ -4,6 +4,11 @@ from sklearn.base import BaseEstimator
 from .preprocess import Preprocess
 
 from xgboost import XGBClassifier
+from lightgbm import LGBMClassifier
+from sklearn.ensemble import BaggingClassifier, GradientBoostingClassifier, RandomForestClassifier
+from sklearn.neural_network import MLPClassifier
+from sklearn import svm
+
 
 class Classifier (BaseEstimator):
     def __init__(self, pp=None):
@@ -11,13 +16,13 @@ class Classifier (BaseEstimator):
         self.pp = pp
         self.ready = False
 
-    def preprocess(self, X, y):
+    def preprocess(self, X, y, training=False):
         if self.pp is None:
             self.pp = Preprocess()
-        return self.pp.execute(X, y)
+        return self.pp.execute(X, y, overwrite=training)
 
     def fit(self, X, y=None):
-        X, y = self.preprocess(X, y)
+        X, y = self.preprocess(X, y, training=True)
         self.c.fit(X,y)
         self.ready = True
 
@@ -87,3 +92,30 @@ class XGBoost(Classifier):
             colsample_bytree=colsample_bytree,
             use_label_encoder=False
         )
+class LightGBM(Classifier):
+    def __init__(self, pp=None, n_estimators=100):
+        super().__init__(pp=pp)
+        self.n_estimators=100
+
+        self.c = LGBMClassifier(n_estimators=n_estimators)
+class Bagging(Classifier):
+    def __init__(self, pp=None):
+        super().__init__(pp=pp)
+        self.c = BaggingClassifier()
+class GradientBoost(Classifier):
+    def __init__(self, pp=None):
+        super().__init__(pp=pp)
+        self.c = GradientBoostingClassifier()
+class NeuralNet(Classifier):
+    def __init__(self, pp=None):
+        super().__init__(pp=pp)
+        self.c = MLPClassifier(solver='lbfgs', alpha=1e-5,\
+            hidden_layer_sizes=(5,2), max_iter=200)
+class RandomForest(Classifier):
+    def __init__(self, pp=None):
+        super().__init__(pp=pp)
+        self.c = RandomForestClassifier()
+class SVM(Classifier):
+    def __init__(self,pp=None):
+        super().__init__(pp=pp)
+        self.c = svm.SVC(probability=True)

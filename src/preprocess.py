@@ -36,9 +36,15 @@ class Preprocess:
         self.scaled = False
         self.scaler = None
     
-    def execute(self, X, y):
+    def execute(self, X, y, overwrite=False):
         """Runs the built pipeline against X,y and returns the preprocessed frames
         """
+        if overwrite:
+            self.oh_enc = None
+            self.correlated_features=[]
+            self.low_impact_features=[]
+            self.pca = None
+            self.scaler = None
         self.scaled = False
         for f in self.pipeline:
             X,y = f(X,y)
