@@ -9,6 +9,7 @@ from sklearn.ensemble import BaggingClassifier, GradientBoostingClassifier, Rand
 from sklearn.neural_network import MLPClassifier
 from sklearn import svm
 
+from joblib import Parallel, delayed
 
 class Classifier (BaseEstimator):
     def __init__(self, pp=None):
@@ -41,11 +42,16 @@ class Classifier (BaseEstimator):
         for i in range(n):
             s = cross_val_score(self, data.X, y=data.y, 
                 cv=StratifiedKFold(n_splits=5, shuffle=True),
-                scoring=self.auc_precision_recall, error_score='raise', verbose=3)
+                scoring=self.auc_precision_recall, error_score='raise', verbose=3,n_jobs=16)
             scores.extend(s.tolist())
-            print(f"Cross Validate Iteration: {i+1}/{n}")
 
         return scores
+    def cvp(self, data, n=1):
+        scores = Parallel(n_jobs=16)(delayed(self.cvp_)(data) for i in range(n))
+        
+        return scores
+    def cvp_(self, data):
+        return cross_val_score(self, data.X, y=data.y, cv=StratifiedKFold(n_splits=5, shuffle=True),scoring=self.auc_precision_recall, error_score='raise',verbose=3).tolist()
     
     def predict_proba(self, X):
         return self.c.predict_proba(X)
@@ -73,7 +79,8 @@ class XGBoost(Classifier):
                  max_depth=6,
                  gamma=0,
                  subsample=1,
-                 colsample_bytree=1
+                 colsample_bytree=1,
+                 min_child_weight=1
                  ):
         
         # Initialize super class
@@ -87,6 +94,7 @@ class XGBoost(Classifier):
         self.subsample=1
         self.colsample_bytree=colsample_bytree
         self.use_label_encoder=False
+        self.min_child_weight=min_child_weight
 
         # Create classifier
         self.c = XGBClassifier(
@@ -97,15 +105,19 @@ class XGBoost(Classifier):
             max_depth=max_depth,
             gamma=gamma,
             subsample=1,
+            min_child_weight=min_child_weight,
             colsample_bytree=colsample_bytree,
             use_label_encoder=False
         )
 class LightGBM(Classifier):
-    def __init__(self, pp=None, n_estimators=100):
+    def __init__(self, pp=None, n_estimators=100, learning_rate=.1, num_leaves=31):
         super().__init__(pp=pp)
-        self.n_estimators=100
+        self.n_estimators = n_estimators
+        self.learning_rate = learning_rate
+        self.num_leaves = num_leaves
 
-        self.c = LGBMClassifier(n_estimators=n_estimators)
+        self.c = LGBMClassifier(n_estimators=n_estimators,
+                                learning_rate=learning_rate, num_leaves=num_leaves)
 class Bagging(Classifier):
     def __init__(self, pp=None):
         super().__init__(pp=pp)
