@@ -37,7 +37,7 @@ def select(grid, X, y):
                 for mean, std, params in zip(
                     clf.cv_results_["mean_test_score"],
                     clf.cv_results_["std_test_score"],
-                    clf.cv_results["params"]
+                    clf.cv_results_["params"]
                 )
             ])
         scores.sort(key=lambda r: r.mean, reverse=True)
