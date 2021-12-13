@@ -86,9 +86,7 @@ class Preprocess:
     def _remove_columns(self, columns, X, y):
         # Check that all columns exist in the DataFrame
         if not set(columns).issubset(X.columns):
-            no_exist = [c for c in columns if c not in X.columns]
-            raise LookupError(
-                f"One or more columns were not found in the DataFrame: {no_exist}")
+            return X, y
 
         return X.drop(columns, axis=1), y
 
