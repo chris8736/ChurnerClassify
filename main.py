@@ -5,7 +5,7 @@ from src.data import Data
 from joblib import Parallel, delayed, parallel_backend
 
 from statistics import mean, stdev
-from sklearn.model_selection import ParameterGrid, GridSearchCV
+from sklearn.model_selection import ParameterGrid, GridSearchCV, StratifiedKFold
 from dataclasses import dataclass
 
 @dataclass
@@ -60,7 +60,7 @@ def cross_validate_with_tuning(grid, n=20):
             scores = select(grid, X_train, y_train)
             
             best = scores[0]
-            final_scores.append(raw_score(best.c, best.p, Classifier.auc_precision_recall(best.c, X_test, y_test)))
+            final_scores.append(raw_score(best.c, best.params, Classifier.auc_precision_recall(best.c, X_test, y_test)))
 
     return final_scores
     
